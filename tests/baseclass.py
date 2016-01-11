@@ -142,12 +142,17 @@ class RequiresDisk(RequiresDevice):
         self._disk = _ped.disk_new_fresh(self._device, _ped.disk_type_get("msdos"))
         self.disk = parted.Disk(PedDisk=self._disk)
 
-# Base class for any test case that requires a filesystem made and mounted.
-class RequiresMount(RequiresDevice):
+
+@unittest.skipIf(os.getuid() != 0, "mount requires root")
+class RequiresMount(RequiresDisk):
+    """
+        Base class for any test case that requires a filesystem made and mounted
+    """
     def setUp(self):
         self.addCleanup(self.removeMountpoint)
-        RequiresDevice.setUp(self)
+        RequiresDisk.setUp(self)
         self.mountpoint = None
+        self.loop = None
 
     def mkfs(self):
         os.system("mkfs.ext2 -F -q %s" % self.path)
@@ -155,6 +160,11 @@ class RequiresMount(RequiresDevice):
     def doMount(self):
         self.mountpoint = tempfile.mkdtemp()
         os.system("mount -o loop %s %s" % (self.path, self.mountpoint))
+        # save the loop device node
+        for line in open("/proc/mounts", "r").readlines():
+            if line.find(self.mountpoint) > -1:
+                self.loop = line.split(" ")[0]
+                break
 
     def removeMountpoint(self):
         if self.mountpoint and os.path.exists(self.mountpoint):

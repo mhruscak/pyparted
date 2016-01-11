@@ -23,7 +23,7 @@
 import parted
 import unittest
 
-from tests.baseclass import RequiresDisk
+from tests.baseclass import *
 
 # One class per method, multiple tests per class.  For these simple methods,
 # that seems like good organization.  More complicated methods may require
@@ -88,11 +88,19 @@ class DiskSupportsFeatureTestCase(unittest.TestCase):
         # TODO
         self.fail("Unimplemented test case.")
 
-@unittest.skip("Unimplemented test case.")
-class DiskAddPartitionTestCase(unittest.TestCase):
+class DiskAddPartitionTestCase(RequiresDisk):
+    """
+        addPartition should return True if partition is added successfully(even
+        without committing)
+    """
     def runTest(self):
-        # TODO
-        self.fail("Unimplemented test case.")
+        self.disk.setFlag(parted.DISK_CYLINDER_ALIGNMENT)
+
+        length = 100
+        geom = parted.Geometry(self.device, start=100, length=length)
+        part = parted.Partition(self.disk, parted.PARTITION_NORMAL, geometry=geom)
+        constraint = parted.Constraint(exactGeom=geom)
+        self.assertTrue(self.disk.addPartition(part, constraint))
 
 @unittest.skip("Unimplemented test case.")
 class DiskRemovePartitionTestCase(unittest.TestCase):
@@ -142,17 +150,43 @@ class DiskGetPartitionBySectorTestCase(unittest.TestCase):
         # TODO
         self.fail("Unimplemented test case.")
 
-@unittest.skip("Unimplemented test case.")
-class DiskGetMaxLogicalPartitionsTestCase(unittest.TestCase):
+class DiskGetMaxLogicalPartitionsTestCase(RequiresDisk):
+    """
+        getMaxLogicalPartitions return int values based on which type of disk
+        is used. It search for occurrence of keys in device path(e.g. /dev/sda)
+        and compare it with predefined values("sd": 11). As unittest
+        environment is using file with generic name(e.g.
+        /tmp/temp-device-C64w78), test focus only on type of returned value
+    """
     def runTest(self):
-        # TODO
-        self.fail("Unimplemented test case.")
+        self.assertIsInstance(self.disk.getMaxLogicalPartitions(), int)
 
-@unittest.skip("Unimplemented test case.")
-class DiskGetMaxSupportedPartitionCountTestCase(unittest.TestCase):
+class DiskGetMaxSupportedPartitionCountTestCase(RequiresDisk):
+    """
+        maxSupportedPartitionCount should return value 64, based on default
+        value MAX_NUM_PARTS(parted/libparted/arch/linux.c) applied if it cannot
+        find value in /sys/block/DEV/ext_range . Also see testcase
+        DiskGetMaxSupportedPartitionCountTestCase in tests/test__ped_disk ,
+        which tests value returned by source C function defined in module _ped
+    """
     def runTest(self):
-        # TODO
-        self.fail("Unimplemented test case.")
+        self.assertEqual(self.disk.maxSupportedPartitionCount, 64)
+
+class DiskGetMaxSupportedPartitionCountLoopDiskTestCase(RequiresMount):
+    """
+        If value ext_range for device is available,
+        disk.maxSupportedPartitionCount should return this value.
+    """
+    def setUp(self):
+        RequiresMount.setUp(self)
+        self.mkfs()
+        self.doMount()
+
+    def runTest(self):
+        path_ext_range = "/sys/block/%s/ext_range" % self.loop.split("/")[2]
+        value_ext_range = open(path_ext_range, 'r').read().strip()
+        value_ext_range = int(value_ext_range)
+        self.assertEqual(self.disk.maxSupportedPartitionCount, value_ext_range)
 
 class DiskMaxPartitionLengthTestCase(RequiresDisk):
     def runTest(self):
